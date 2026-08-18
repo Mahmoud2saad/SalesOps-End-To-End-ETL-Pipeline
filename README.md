@@ -4,7 +4,7 @@
 
 A layered ETL pipeline that moves the TPC-H benchmark dataset through bronze, silver, and gold stages — PostgreSQL for staging, Snowflake for the analytical warehouse — orchestrated with Airflow and built on PySpark.
 
-This is a fork of [Ibrahim-Hegazi/SalesOps-End-To-End-ETL-Pipeline](https://github.com/Ibrahim-Hegazi/SalesOps-End-To-End-ETL-Pipeline), originally built by a six-person team. See [Provenance](#provenance) for details on what's inherited versus what's been added in this fork.
+This project is based on [Ibrahim-Hegazi/SalesOps-End-To-End-ETL-Pipeline](https://github.com/Ibrahim-Hegazi/SalesOps-End-To-End-ETL-Pipeline), originally built by a six-person team. I downloaded the original codebase, worked on it independently, and pushed it here as a standalone repository. See [Provenance](#provenance) for exactly what's inherited versus what I added.
 
 ## Table of Contents
 
@@ -253,9 +253,14 @@ DQ checks exit non-zero on a critical failure, which fails the task directly —
 
 ## Provenance
 
-This repository is a fork of [Ibrahim-Hegazi/SalesOps-End-To-End-ETL-Pipeline](https://github.com/Ibrahim-Hegazi/SalesOps-End-To-End-ETL-Pipeline), originally built as a team project — see `docs/tasks_distribution/` for the original task breakdown and team roster (Ibrahim, Manar, Ahmed, Abram, Habiba, Shrouk). The Snowflake environment (account, schema and role grants) is inherited from that original setup and left unchanged, since it's tied to a real account rather than just a name.
+This project began as a copy of [Ibrahim-Hegazi/SalesOps-End-To-End-ETL-Pipeline](https://github.com/Ibrahim-Hegazi/SalesOps-End-To-End-ETL-Pipeline), originally built as a six-person team project — see `docs/tasks_distribution/` for the original task breakdown and team roster (Ibrahim, Manar, Ahmed, Abram, Habiba, Shrouk). I downloaded the original codebase, developed independently on my own machine, and pushed the result here as a standalone repository rather than a GitHub fork. The Snowflake environment (account, schema and role grants) is inherited from that original setup and left unchanged, since it's tied to a real account rather than just a name.
 
-Work done in this fork: watermark and audit logging hardening, the data quality framework (bronze and silver checks, including SCD2 invariants), the unit and integration test suites, CI, and fixes to the Airflow DAG (it previously pointed at a stale legacy script).
+**What I added on top of the original:**
+- The full data quality framework — bronze and silver checks, including SCD2 invariants — writing to `control.data_quality_metrics`
+- The unit test suite (18 tests, mocked) and integration test suite (8 tests, against a live Postgres instance)
+- CI pipeline (GitHub Actions) running both test suites on every push
+- Watermark and audit logging hardening
+- Fixes to the Airflow DAG, which previously pointed at a stale legacy script
 
 ## Contact
 
