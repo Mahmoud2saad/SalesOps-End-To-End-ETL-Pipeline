@@ -1,0 +1,795 @@
+# version: '3.8'
+
+# # ============================================================================
+# # NETWORK CONFIGURATION
+# # ============================================================================
+# networks:
+#   data-net:
+#     driver: bridge
+
+# # ============================================================================
+# # VOLUMES FOR CACHING
+# # ============================================================================
+# volumes:
+#   pip-cache:
+#     driver: local
+
+# # ============================================================================
+# # SERVICES
+# # ============================================================================
+# services:
+#   # ============================================================================
+#   # LOCAL DATABASE - TPC-H Data (30GB)
+#   # ============================================================================
+#   postgres-local:
+#     image: postgres:15
+#     container_name: postgres-local
+#     hostname: postgres-local
+#     ports:
+#       - "${POSTGRES_LOCAL_PORT}:5432"
+#     environment:
+#       - POSTGRES_USER=${POSTGRES_LOCAL_USER}
+#       - POSTGRES_PASSWORD=${POSTGRES_LOCAL_PASSWORD}
+#       - POSTGRES_DB=${POSTGRES_LOCAL_DB}
+#       # Removed POSTGRES_HOST_AUTH_METHOD=trust for security
+#     volumes:
+#       - ${POSTGRES_LOCAL_VOLUME}:/var/lib/postgresql/data
+#       - ./sql_scripts/local/:/docker-entrypoint-initdb.d/             # What is the meaning of this
+#       # - ${BRONZE_SCRIPTS_VOLUME}:/docker-entrypoint-initdb.d/01-bronze
+#       # - ${SILVER_SCRIPTS_VOLUME}:/docker-entrypoint-initdb.d/02-silver
+#       # - ${CONTROL_SCRIPTS_VOLUME}:/docker-entrypoint-initdb.d/00-control
+#       - ./data:/data
+#     networks:
+#       - data-net
+#     healthcheck:
+#       test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_LOCAL_USER} -d ${POSTGRES_LOCAL_DB}"]
+#       interval: 10s
+#       timeout: 5s
+#       retries: 5
+#     deploy:
+#       resources:
+#         limits:
+#           memory: 4G
+#         reservations:
+#           memory: 2G
+
+#   # ============================================================================
+#   # CONTROL DATABASE - Watermarks, Audit Logs, DQ Results
+#   # ============================================================================
+#   postgres-control:
+#     image: postgres:15
+#     container_name: postgres-control
+#     hostname: postgres-control
+#     ports:
+#       - "${POSTGRES_CONTROL_PORT}:5432"
+#     environment:
+#       - POSTGRES_USER=${POSTGRES_CONTROL_USER}
+#       - POSTGRES_PASSWORD=${POSTGRES_CONTROL_PASSWORD}
+#       - POSTGRES_DB=${POSTGRES_CONTROL_DB}
+#     volumes:
+#       - ${POSTGRES_CONTROL_VOLUME}:/var/lib/postgresql/data
+#       - ${CONTROL_SCRIPTS_VOLUME}:/docker-entrypoint-initdb.d
+#     networks:
+#       - data-net
+#     healthcheck:
+#       test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_CONTROL_USER} -d ${POSTGRES_CONTROL_DB}"]
+#       interval: 10s
+#       timeout: 5s
+#       retries: 5
+#     deploy:
+#       resources:
+#         limits:
+#           memory: 2G
+#         reservations:
+#           memory: 1G
+
+#   # ============================================================================
+#   # pgAdmin - Database Management UI
+#   # ============================================================================
+#   pgadmin:
+#     image: dpage/pgadmin4:7
+#     container_name: pgadmin
+#     environment:
+#       PGADMIN_DEFAULT_EMAIL: ${PGADMIN_EMAIL}
+#       PGADMIN_DEFAULT_PASSWORD: ${PGADMIN_PASSWORD}
+#     ports:
+#       - "${PGADMIN_PORT}:80"
+#     volumes:
+#       - ${PGADMIN_VOLUME}:/var/lib/pgadmin
+#       - ./data:/data
+#       - ./postgres/backups:/backups
+#     depends_on:
+#       postgres-local:
+#         condition: service_healthy
+#       postgres-control:
+#         condition: service_healthy
+#     networks:
+#       - data-net
+#     deploy:
+#       resources:
+#         limits:
+#           memory: 1G
+#         reservations:
+#           memory: 512M
+
+#   # ============================================================================
+#   # AIRFLOW - Orchestration (LocalExecutor)
+#   # ============================================================================
+#   postgres-airflow:
+#     image: postgres:15
+#     container_name: postgres-airflow
+#     hostname: postgres-airflow
+#     ports:
+#       - "${POSTGRES_AIRFLOW_PORT}:5432"
+#     environment:
+#       - POSTGRES_USER=${POSTGRES_AIRFLOW_USER}
+#       - POSTGRES_PASSWORD=${POSTGRES_AIRFLOW_PASSWORD}
+#       - POSTGRES_DB=${POSTGRES_AIRFLOW_DB}
+#     volumes:
+#       - ${POSTGRES_AIRFLOW_VOLUME}:/var/lib/postgresql/data
+#     networks:
+#       - data-net
+#     healthcheck:
+#       test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_AIRFLOW_USER} -d ${POSTGRES_AIRFLOW_DB}"]
+#       interval: 10s
+#       timeout: 5s
+#       retries: 5
+#     deploy:
+#       resources:
+#         limits:
+#           memory: 2G
+#         reservations:
+#           memory: 1G
+
+#   airflow-webserver:
+#     image: ${AIRFLOW_IMAGE}
+#     container_name: airflow-webserver
+#     hostname: airflow-webserver
+#     ports:
+#       - "${AIRFLOW_PORT:-8080}:8080"
+#     environment:
+#       # Core Settings
+#       - AIRFLOW__CORE__EXECUTOR=LocalExecutor
+#       - AIRFLOW__CORE__SQL_ALCHEMY_CONN=postgresql+psycopg2://${POSTGRES_AIRFLOW_USER}:${POSTGRES_AIRFLOW_PASSWORD}@postgres-airflow:5432/${POSTGRES_AIRFLOW_DB}
+#       - AIRFLOW__DATABASE__SQL_ALCHEMY_CONN=postgresql+psycopg2://${POSTGRES_AIRFLOW_USER}:${POSTGRES_AIRFLOW_PASSWORD}@postgres-airflow:5432/${POSTGRES_AIRFLOW_DB}
+#       - AIRFLOW__CORE__FERNET_KEY=${AIRFLOW_FERNET_KEY}
+#       - AIRFLOW__CORE__LOAD_EXAMPLES=False
+#       - AIRFLOW__CORE__ENABLE_XCOM_PICKLING=True
+#       - AIRFLOW__WEBSERVER__SECRET_KEY=${AIRFLOW_SECRET_KEY}
+      
+#       # Performance Optimizations
+#       - AIRFLOW__SCHEDULER__PARSING_PROCESSES=2
+#       - AIRFLOW__CORE__PARALLELISM=32
+#       - AIRFLOW__CORE__DAG_CONCURRENCY=16
+#       - AIRFLOW__CORE__MAX_ACTIVE_RUNS_PER_DAG=3
+      
+#       # Connection Strings
+#       - AIRFLOW_CONN_POSTGRES_LOCAL=postgresql://${POSTGRES_LOCAL_USER}:${POSTGRES_LOCAL_PASSWORD}@postgres-local:5432/${POSTGRES_LOCAL_DB}      
+#       - AIRFLOW_CONN_POSTGRES_CONTROL=postgresql://${POSTGRES_CONTROL_USER}:${POSTGRES_CONTROL_PASSWORD}@postgres-control:5432/${POSTGRES_CONTROL_DB}
+#       - AIRFLOW_CONN_SNOWFLAKE=${SNOWFLAKE_CONN}
+      
+#       # Airflow Variables
+#       - AIRFLOW_VAR_ENVIRONMENT=development
+#       - AIRFLOW_VAR_BATCH_SIZE=100000
+#       - AIRFLOW_VAR_CREDIT_ALERT_THRESHOLD=320
+      
+#       # Additional packages
+#       - _PIP_ADDITIONAL_REQUIREMENTS=${AIRFLOW_EXTRA_PIP_PACKAGES}
+      
+#       # Slow internet optimizations
+#       - PIP_DEFAULT_TIMEOUT=300
+#       - PIP_RETRIES=5
+#     volumes:
+#       - ${AIRFLOW_DAGS_VOLUME}:/opt/airflow/dags
+#       - ${AIRFLOW_LOGS_VOLUME}:/opt/airflow/logs
+#       - ${AIRFLOW_PLUGINS_VOLUME}:/opt/airflow/plugins
+#       - ${AIRFLOW_SCRIPTS_VOLUME}:/opt/airflow/scripts
+#       - ${DEV_CODE_VOLUME}:/opt/airflow/dev_code
+#       - ./data:/data
+#       - pip-cache:/home/airflow/.cache/pip
+#     depends_on:
+#       postgres-airflow:
+#         condition: service_healthy
+#       postgres-local:
+#         condition: service_healthy
+#       postgres-control:
+#         condition: service_healthy
+#     networks:
+#       - data-net
+#     # WORKING VERSION
+#     # command: >
+#     #   bash -c "
+#     #   echo '==================================================' &&
+#     #   echo 'STARTING AIRFLOW WEBSERVER INITIALIZATION' &&
+#     #   echo '==================================================' &&
+#     #   echo '[1/5] Environment: OK' &&
+#     #   echo '[2/5] Checking packages...' &&
+#     #   echo '[3/5] Initializing database...' &&
+#     #   airflow db init &&
+#     #   echo '[4/5] Creating admin user...' &&
+#     #   airflow users create --username admin --firstname Admin --lastname User --role Admin --email admin@example.com --password admin 2>/dev/null ||
+#     #   echo 'Admin user already exists, continuing...' &&
+#     #   echo '[5/5] Starting webserver...' &&
+#     #   echo '✅ Airflow ready at http://localhost:8080' &&
+#     #   echo '👤 Username: admin' &&
+#     #   echo '🔑 Password: admin' &&
+#     #   airflow webserver
+#     #   "
+#     # WORKING BUT RUNNING THE CODE WITH COMMAND ABOVE FIRST
+#     command: >
+#       bash -c "
+#       echo '==================================================' &&
+#       echo 'STARTING AIRFLOW' &&
+#       echo '==================================================' &&
+#       echo '[1/5] Waiting for PostgreSQL...' &&
+#       until PGPASSWORD=${POSTGRES_AIRFLOW_PASSWORD} psql -h postgres-airflow -U ${POSTGRES_AIRFLOW_USER} -d ${POSTGRES_AIRFLOW_DB} -c '\\q' 2>/dev/null; do
+#         echo 'PostgreSQL is unavailable - sleeping' &&
+#         sleep 3
+#       done &&
+#       echo 'PostgreSQL is up!' &&
+#       echo '[2/5] Initializing database...' &&
+#       airflow db init &&
+#       echo '[3/5] Creating admin user...' &&
+#       if airflow users list | grep -q admin; then
+#         echo 'Admin user already exists, skipping creation...'
+#       else
+#         airflow users create --username admin --firstname Admin --lastname User --role Admin --email admin@example.com --password admin
+#         if [ $? -eq 0 ]; then
+#           echo '✅ Admin user created successfully'
+#         else
+#           echo '❌ Failed to create admin user!' >&2
+#           exit 1
+#         fi
+#       fi &&
+#       echo '[4/5] Starting services...' &&
+#       echo '✅ Airflow ready at http://localhost:'${AIRFLOW_PORT:-8080} &&
+#       echo '👤 Username: admin' &&
+#       echo '🔑 Password: admin' &&
+#       echo 'Starting webserver and scheduler...' &&
+#       airflow webserver &
+#       exec airflow scheduler
+#       "
+#     healthcheck:
+#       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8080/health')"]
+#       interval: 30s
+#       timeout: 10s
+#       retries: 5
+#       start_period: 120s
+#     deploy:
+#       resources:
+#         limits:
+#           memory: 4G
+#         reservations:
+#           memory: 2G
+
+#   # ============================================================================
+#   # DEVELOPMENT ENVIRONMENT - Jupyter with PySpark
+#   # ============================================================================
+#   python-dev:
+#     image: jupyter/pyspark-notebook:spark-3.4.1
+#     container_name: python-dev
+#     ports:
+#       - "${JUPYTER_PORT}:8888"
+#       - "${SPARK_UI_PORT}:4040"
+#     volumes:
+#       - ${DEV_CODE_VOLUME}:/home/jovyan/work
+#       - ./data:/home/jovyan/data
+#       - ${CHECKPOINT_VOLUME}:/home/jovyan/checkpoint
+#       - pip-cache:/home/jovyan/.cache/pip
+#     environment:
+#       - JUPYTER_ENABLE_LAB=yes
+#       - JUPYTER_TOKEN=${JUPYTER_TOKEN}
+#       - COMMON_PACKAGES=${COMMON_PYTHON_PACKAGES}
+#       - PIP_DEFAULT_TIMEOUT=300
+#       - PIP_RETRIES=5
+#     depends_on:
+#       postgres-local:
+#         condition: service_healthy
+#       postgres-control:
+#         condition: service_healthy
+#     networks:
+#       - data-net
+#     command: >
+#       bash -c "
+#       echo '==================================================' &&
+#       echo 'STARTING PYTHON DEV ENVIRONMENT' &&
+#       echo '==================================================' &&
+#       echo '[1/3] Installing packages (slow internet mode)...' &&
+#       for i in 1 2 3; do
+#         echo \"Attempt \$i of 3...\" &&
+#         pip install --user --no-cache-dir \${COMMON_PYTHON_PACKAGES} --upgrade-strategy only-if-needed &&
+#         if [ \$? -eq 0 ]; then
+#           break
+#         fi
+#         if [ \$i -lt 3 ]; then
+#           echo 'Failed, retrying in 30s...' &&
+#           sleep 30
+#         fi
+#       done &&
+#       echo '[2/3] Verifying installations...' &&
+#       python -c \"import pandas, pyspark, snowflake.connector; print('✅ All packages imported')\" || true &&
+#       echo '[3/3] Starting Jupyter...' &&
+#       echo '✅ Jupyter ready at http://localhost:'\${JUPYTER_PORT}'?token='\${JUPYTER_TOKEN} &&
+#       start-notebook.sh
+#       "
+#     deploy:
+#       resources:
+#         limits:
+#           memory: 8G
+#         reservations:
+#           memory: 4G
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+version: '3.8'
+
+# ============================================================================
+# NETWORK CONFIGURATION
+# ============================================================================
+networks:
+  data-net:
+    driver: bridge
+
+# ============================================================================
+# VOLUMES FOR CACHING
+# ============================================================================
+volumes:
+  pip-cache:
+    driver: local
+
+# ============================================================================
+# SERVICES
+# ============================================================================
+services:
+  # ============================================================================
+  # LOCAL DATABASE - TPC-H Data (30GB)
+  # ============================================================================
+  postgres-local:
+    image: postgres:15
+    container_name: postgres-local
+    hostname: postgres-local
+    ports:
+      - "${POSTGRES_LOCAL_PORT}:5432"
+    environment:
+      - POSTGRES_USER=${POSTGRES_LOCAL_USER}
+      - POSTGRES_PASSWORD=${POSTGRES_LOCAL_PASSWORD}
+      - POSTGRES_DB=${POSTGRES_LOCAL_DB}
+    volumes:
+      - ${POSTGRES_LOCAL_VOLUME}:/var/lib/postgresql/data
+      - ./sql_scripts/local/:/docker-entrypoint-initdb.d/
+      - ./data:/data
+    networks:
+      - data-net
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_LOCAL_USER} -d ${POSTGRES_LOCAL_DB}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    deploy:
+      resources:
+        limits:
+          memory: 4G
+        reservations:
+          memory: 2G
+
+  # ============================================================================
+  # CONTROL DATABASE - Watermarks, Audit Logs, DQ Results
+  # ============================================================================
+  postgres-control:
+    image: postgres:15
+    container_name: postgres-control
+    hostname: postgres-control
+    ports:
+      - "${POSTGRES_CONTROL_PORT}:5432"
+    environment:
+      - POSTGRES_USER=${POSTGRES_CONTROL_USER}
+      - POSTGRES_PASSWORD=${POSTGRES_CONTROL_PASSWORD}
+      - POSTGRES_DB=${POSTGRES_CONTROL_DB}
+    volumes:
+      - ${POSTGRES_CONTROL_VOLUME}:/var/lib/postgresql/data
+      - ${CONTROL_SCRIPTS_VOLUME}:/docker-entrypoint-initdb.d
+    networks:
+      - data-net
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_CONTROL_USER} -d ${POSTGRES_CONTROL_DB}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    deploy:
+      resources:
+        limits:
+          memory: 2G
+        reservations:
+          memory: 1G
+
+  # ============================================================================
+  # pgAdmin - Database Management UI
+  # ============================================================================
+  pgadmin:
+    image: dpage/pgadmin4:7
+    container_name: pgadmin
+    environment:
+      PGADMIN_DEFAULT_EMAIL: ${PGADMIN_EMAIL}
+      PGADMIN_DEFAULT_PASSWORD: ${PGADMIN_PASSWORD}
+    ports:
+      - "${PGADMIN_PORT}:80"
+    volumes:
+      - ${PGADMIN_VOLUME}:/var/lib/pgadmin
+      - ./data:/data
+      - ./postgres/backups:/backups
+    depends_on:
+      postgres-local:
+        condition: service_healthy
+      postgres-control:
+        condition: service_healthy
+    networks:
+      - data-net
+    deploy:
+      resources:
+        limits:
+          memory: 1G
+        reservations:
+          memory: 512M
+
+  # ============================================================================
+  # AIRFLOW DATABASE
+  # ============================================================================
+  postgres-airflow:
+    image: postgres:15
+    container_name: postgres-airflow
+    hostname: postgres-airflow
+    ports:
+      - "${POSTGRES_AIRFLOW_PORT}:5432"
+    environment:
+      - POSTGRES_USER=${POSTGRES_AIRFLOW_USER}
+      - POSTGRES_PASSWORD=${POSTGRES_AIRFLOW_PASSWORD}
+      - POSTGRES_DB=${POSTGRES_AIRFLOW_DB}
+    volumes:
+      - ${POSTGRES_AIRFLOW_VOLUME}:/var/lib/postgresql/data
+    networks:
+      - data-net
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_AIRFLOW_USER} -d ${POSTGRES_AIRFLOW_DB}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    deploy:
+      resources:
+        limits:
+          memory: 2G
+        reservations:
+          memory: 1G
+
+  # ============================================================================
+  # REDIS - Message Broker for Celery
+  # ============================================================================
+  redis:
+    image: redis:7-alpine
+    container_name: redis
+    hostname: redis
+    ports:
+      - "${REDIS_PORT:-6379}:6379"
+    networks:
+      - data-net
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    deploy:
+      resources:
+        limits:
+          memory: 1G
+        reservations:
+          memory: 512M
+
+  # ============================================================================
+  # AIRFLOW WEBSERVER
+  # ============================================================================
+  airflow-webserver:
+    image: ${AIRFLOW_IMAGE}
+    container_name: airflow-webserver
+    hostname: airflow-webserver
+    ports:
+      - "${AIRFLOW_PORT:-8080}:8080"
+    environment:
+      # Core Settings
+      - AIRFLOW__CORE__EXECUTOR=${AIRFLOW_CORE_EXECUTOR:-CeleryExecutor}
+      - AIRFLOW__CORE__SQL_ALCHEMY_CONN=postgresql+psycopg2://${POSTGRES_AIRFLOW_USER}:${POSTGRES_AIRFLOW_PASSWORD}@postgres-airflow:5432/${POSTGRES_AIRFLOW_DB}
+      - AIRFLOW__DATABASE__SQL_ALCHEMY_CONN=postgresql+psycopg2://${POSTGRES_AIRFLOW_USER}:${POSTGRES_AIRFLOW_PASSWORD}@postgres-airflow:5432/${POSTGRES_AIRFLOW_DB}
+      - AIRFLOW__CELERY__RESULT_BACKEND=db+postgresql://${POSTGRES_AIRFLOW_USER}:${POSTGRES_AIRFLOW_PASSWORD}@postgres-airflow:5432/${POSTGRES_AIRFLOW_DB}
+      - AIRFLOW__CELERY__BROKER_URL=redis://redis:6379/0
+      - AIRFLOW__CORE__FERNET_KEY=${AIRFLOW_FERNET_KEY}
+      - AIRFLOW__CORE__LOAD_EXAMPLES=False
+      - AIRFLOW__CORE__ENABLE_XCOM_PICKLING=True
+      - AIRFLOW__WEBSERVER__SECRET_KEY=${AIRFLOW_SECRET_KEY}
+      
+      # Performance Optimizations
+      - AIRFLOW__SCHEDULER__PARSING_PROCESSES=2
+      - AIRFLOW__CORE__PARALLELISM=32
+      - AIRFLOW__CORE__DAG_CONCURRENCY=16
+      - AIRFLOW__CORE__MAX_ACTIVE_RUNS_PER_DAG=3
+      
+      # Connection Strings
+      - AIRFLOW_CONN_POSTGRES_LOCAL=postgresql://${POSTGRES_LOCAL_USER}:${POSTGRES_LOCAL_PASSWORD}@postgres-local:5432/${POSTGRES_LOCAL_DB}      
+      - AIRFLOW_CONN_POSTGRES_CONTROL=postgresql://${POSTGRES_CONTROL_USER}:${POSTGRES_CONTROL_PASSWORD}@postgres-control:5432/${POSTGRES_CONTROL_DB}
+      - AIRFLOW_CONN_SNOWFLAKE=${SNOWFLAKE_CONN}
+      
+      # Airflow Variables
+      - AIRFLOW_VAR_ENVIRONMENT=development
+      - AIRFLOW_VAR_BATCH_SIZE=100000
+      - AIRFLOW_VAR_CREDIT_ALERT_THRESHOLD=320
+      
+      # Additional packages
+      - _PIP_ADDITIONAL_REQUIREMENTS=${AIRFLOW_EXTRA_PIP_PACKAGES}
+      
+      # Slow internet optimizations
+      - PIP_DEFAULT_TIMEOUT=300
+      - PIP_RETRIES=5
+    volumes:
+      - ${AIRFLOW_DAGS_VOLUME}:/opt/airflow/dags
+      - ${AIRFLOW_LOGS_VOLUME}:/opt/airflow/logs
+      - ${AIRFLOW_PLUGINS_VOLUME}:/opt/airflow/plugins
+      - ${AIRFLOW_SCRIPTS_VOLUME}:/opt/airflow/scripts
+      - ${DEV_CODE_VOLUME}:/opt/airflow/dev_code
+      - ./data:/data
+      - pip-cache:/home/airflow/.cache/pip
+    depends_on:
+      postgres-airflow:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      postgres-local:
+        condition: service_healthy
+      postgres-control:
+        condition: service_healthy
+    networks:
+      - data-net
+    command: >
+      bash -c "
+      echo '==================================================' &&
+      echo 'STARTING AIRFLOW WEBSERVER' &&
+      echo '==================================================' &&
+      echo '[1/3] Initializing database...' &&
+      airflow db init &&
+      echo '[2/3] Creating admin user...' &&
+      airflow users create --username admin --firstname Admin --lastname User --role Admin --email admin@example.com --password admin 2>/dev/null ||
+      echo 'Admin user already exists, continuing...' &&
+      echo '[3/3] Starting webserver...' &&
+      echo '✅ Airflow ready at http://localhost:8080' &&
+      echo '👤 Username: admin' &&
+      echo '🔑 Password: admin' &&
+      airflow webserver
+      "
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8080/health')"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 120s
+    deploy:
+      resources:
+        limits:
+          memory: 4G
+        reservations:
+          memory: 2G
+
+  # ============================================================================
+  # AIRFLOW SCHEDULER
+  # ============================================================================
+  airflow-scheduler:
+    image: ${AIRFLOW_IMAGE}
+    container_name: airflow-scheduler
+    hostname: airflow-scheduler
+    environment:
+      # Core Settings
+      - AIRFLOW__CORE__EXECUTOR=${AIRFLOW_CORE_EXECUTOR:-CeleryExecutor}
+      - AIRFLOW__CORE__SQL_ALCHEMY_CONN=postgresql+psycopg2://${POSTGRES_AIRFLOW_USER}:${POSTGRES_AIRFLOW_PASSWORD}@postgres-airflow:5432/${POSTGRES_AIRFLOW_DB}
+      - AIRFLOW__DATABASE__SQL_ALCHEMY_CONN=postgresql+psycopg2://${POSTGRES_AIRFLOW_USER}:${POSTGRES_AIRFLOW_PASSWORD}@postgres-airflow:5432/${POSTGRES_AIRFLOW_DB}
+      - AIRFLOW__CELERY__RESULT_BACKEND=db+postgresql://${POSTGRES_AIRFLOW_USER}:${POSTGRES_AIRFLOW_PASSWORD}@postgres-airflow:5432/${POSTGRES_AIRFLOW_DB}
+      - AIRFLOW__CELERY__BROKER_URL=redis://redis:6379/0
+      - AIRFLOW__CORE__FERNET_KEY=${AIRFLOW_FERNET_KEY}
+      - AIRFLOW__CORE__LOAD_EXAMPLES=False
+      - AIRFLOW__CORE__ENABLE_XCOM_PICKLING=True
+      
+      # Performance Optimizations
+      - AIRFLOW__SCHEDULER__PARSING_PROCESSES=2
+      - AIRFLOW__CORE__PARALLELISM=32
+      - AIRFLOW__CORE__DAG_CONCURRENCY=16
+      - AIRFLOW__CORE__MAX_ACTIVE_RUNS_PER_DAG=3
+      
+      # Connection Strings
+      - AIRFLOW_CONN_POSTGRES_LOCAL=postgresql://${POSTGRES_LOCAL_USER}:${POSTGRES_LOCAL_PASSWORD}@postgres-local:5432/${POSTGRES_LOCAL_DB}      
+      - AIRFLOW_CONN_POSTGRES_CONTROL=postgresql://${POSTGRES_CONTROL_USER}:${POSTGRES_CONTROL_PASSWORD}@postgres-control:5432/${POSTGRES_CONTROL_DB}
+      - AIRFLOW_CONN_SNOWFLAKE=${SNOWFLAKE_CONN}
+      
+      # Airflow Variables
+      - AIRFLOW_VAR_ENVIRONMENT=development
+      - AIRFLOW_VAR_BATCH_SIZE=100000
+      - AIRFLOW_VAR_CREDIT_ALERT_THRESHOLD=320
+      
+      # Additional packages
+      - _PIP_ADDITIONAL_REQUIREMENTS=${AIRFLOW_EXTRA_PIP_PACKAGES}
+      
+      # Slow internet optimizations
+      - PIP_DEFAULT_TIMEOUT=300
+      - PIP_RETRIES=5
+    volumes:
+      - ${AIRFLOW_DAGS_VOLUME}:/opt/airflow/dags
+      - ${AIRFLOW_LOGS_VOLUME}:/opt/airflow/logs
+      - ${AIRFLOW_PLUGINS_VOLUME}:/opt/airflow/plugins
+      - ${AIRFLOW_SCRIPTS_VOLUME}:/opt/airflow/scripts
+      - ${DEV_CODE_VOLUME}:/opt/airflow/dev_code
+      - ./data:/data
+      - pip-cache:/home/airflow/.cache/pip
+    depends_on:
+      postgres-airflow:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - data-net
+    command: >
+      bash -c "
+      echo '==================================================' &&
+      echo 'STARTING AIRFLOW SCHEDULER' &&
+      echo '==================================================' &&
+      echo 'Waiting for database...' &&
+      until airflow db check; do
+        echo 'Database not ready - sleeping' &&
+        sleep 3
+      done &&
+      echo 'Starting scheduler...' &&
+      airflow scheduler
+      "
+    deploy:
+      resources:
+        limits:
+          memory: 2G
+        reservations:
+          memory: 1G
+
+  # ============================================================================
+  # AIRFLOW WORKER
+  # ============================================================================
+  airflow-worker:
+    image: ${AIRFLOW_IMAGE}
+    container_name: airflow-worker
+    hostname: airflow-worker
+    environment:
+      # Core Settings
+      - AIRFLOW__CORE__EXECUTOR=${AIRFLOW_CORE_EXECUTOR:-CeleryExecutor}
+      - AIRFLOW__CORE__SQL_ALCHEMY_CONN=postgresql+psycopg2://${POSTGRES_AIRFLOW_USER}:${POSTGRES_AIRFLOW_PASSWORD}@postgres-airflow:5432/${POSTGRES_AIRFLOW_DB}
+      - AIRFLOW__DATABASE__SQL_ALCHEMY_CONN=postgresql+psycopg2://${POSTGRES_AIRFLOW_USER}:${POSTGRES_AIRFLOW_PASSWORD}@postgres-airflow:5432/${POSTGRES_AIRFLOW_DB}
+      - AIRFLOW__CELERY__RESULT_BACKEND=db+postgresql://${POSTGRES_AIRFLOW_USER}:${POSTGRES_AIRFLOW_PASSWORD}@postgres-airflow:5432/${POSTGRES_AIRFLOW_DB}
+      - AIRFLOW__CELERY__BROKER_URL=redis://redis:6379/0
+      - AIRFLOW__CORE__FERNET_KEY=${AIRFLOW_FERNET_KEY}
+      - AIRFLOW__CORE__LOAD_EXAMPLES=False
+      - AIRFLOW__CORE__ENABLE_XCOM_PICKLING=True
+      
+      # Performance Optimizations
+      - AIRFLOW__CORE__PARALLELISM=32
+      - AIRFLOW__CORE__DAG_CONCURRENCY=16
+      - AIRFLOW__CORE__MAX_ACTIVE_RUNS_PER_DAG=3
+      
+      # Connection Strings
+      - AIRFLOW_CONN_POSTGRES_LOCAL=postgresql://${POSTGRES_LOCAL_USER}:${POSTGRES_LOCAL_PASSWORD}@postgres-local:5432/${POSTGRES_LOCAL_DB}      
+      - AIRFLOW_CONN_POSTGRES_CONTROL=postgresql://${POSTGRES_CONTROL_USER}:${POSTGRES_CONTROL_PASSWORD}@postgres-control:5432/${POSTGRES_CONTROL_DB}
+      - AIRFLOW_CONN_SNOWFLAKE=${SNOWFLAKE_CONN}
+      
+      # Airflow Variables
+      - AIRFLOW_VAR_ENVIRONMENT=development
+      - AIRFLOW_VAR_BATCH_SIZE=100000
+      - AIRFLOW_VAR_CREDIT_ALERT_THRESHOLD=320
+      
+      # Additional packages
+      - _PIP_ADDITIONAL_REQUIREMENTS=${AIRFLOW_EXTRA_PIP_PACKAGES}
+      
+      # Slow internet optimizations
+      - PIP_DEFAULT_TIMEOUT=300
+      - PIP_RETRIES=5
+    volumes:
+      - ${AIRFLOW_DAGS_VOLUME}:/opt/airflow/dags
+      - ${AIRFLOW_LOGS_VOLUME}:/opt/airflow/logs
+      - ${AIRFLOW_PLUGINS_VOLUME}:/opt/airflow/plugins
+      - ${AIRFLOW_SCRIPTS_VOLUME}:/opt/airflow/scripts
+      - ${DEV_CODE_VOLUME}:/opt/airflow/dev_code
+      - ./data:/data
+      - pip-cache:/home/airflow/.cache/pip
+    depends_on:
+      postgres-airflow:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - data-net
+    command: >
+      bash -c "
+      echo '==================================================' &&
+      echo 'STARTING AIRFLOW WORKER' &&
+      echo '==================================================' &&
+      echo 'Waiting for database...' &&
+      until airflow db check; do
+        echo 'Database not ready - sleeping' &&
+        sleep 3
+      done &&
+      echo 'Starting celery worker...' &&
+      airflow celery worker
+      "
+    deploy:
+      resources:
+        limits:
+          memory: 4G
+        reservations:
+          memory: 2G
+
+  # ============================================================================
+  # DEVELOPMENT ENVIRONMENT - Jupyter with PySpark
+  # ============================================================================
+  python-dev:
+    image: jupyter/pyspark-notebook:spark-3.4.1
+    container_name: python-dev
+    ports:
+      - "${JUPYTER_PORT}:8888"
+      - "${SPARK_UI_PORT}:4040"
+    volumes:
+      - ${DEV_CODE_VOLUME}:/home/jovyan/work
+      - ./data:/home/jovyan/data
+      - ${CHECKPOINT_VOLUME}:/home/jovyan/checkpoint
+      - pip-cache:/home/jovyan/.cache/pip
+    environment:
+      - JUPYTER_ENABLE_LAB=yes
+      - JUPYTER_TOKEN=${JUPYTER_TOKEN}
+      - COMMON_PACKAGES=${COMMON_PYTHON_PACKAGES}
+      - PIP_DEFAULT_TIMEOUT=300
+      - PIP_RETRIES=5
+    depends_on:
+      postgres-local:
+        condition: service_healthy
+      postgres-control:
+        condition: service_healthy
+    networks:
+      - data-net
+    command: >
+      bash -c "
+      echo '==================================================' &&
+      echo 'STARTING PYTHON DEV ENVIRONMENT' &&
+      echo '==================================================' &&
+      echo '[1/3] Installing packages (slow internet mode)...' &&
+      for i in 1 2 3; do
+        echo \"Attempt \$i of 3...\" &&
+        pip install --user --no-cache-dir \${COMMON_PYTHON_PACKAGES} --upgrade-strategy only-if-needed &&
+        if [ \$? -eq 0 ]; then
+          break
+        fi
+        if [ \$i -lt 3 ]; then
+          echo 'Failed, retrying in 30s...' &&
+          sleep 30
+        fi
+      done &&
+      echo '[2/3] Verifying installations...' &&
+      python -c \"import pandas, pyspark, snowflake.connector; print('✅ All packages imported')\" || true &&
+      echo '[3/3] Starting Jupyter...' &&
+      echo '✅ Jupyter ready at http://localhost:'\${JUPYTER_PORT}'?token='\${JUPYTER_TOKEN} &&
+      start-notebook.sh
+      "
+    deploy:
+      resources:
+        limits:
+          memory: 8G
+        reservations:
+          memory: 4G

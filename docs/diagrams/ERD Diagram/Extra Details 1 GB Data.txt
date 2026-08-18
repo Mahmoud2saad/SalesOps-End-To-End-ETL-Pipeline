@@ -1,0 +1,9 @@
+📊 Tables found:
+  - customer: 8 columns, 150,000 rows
+  - lineitem: 16 columns, 6,001,215 rows
+  - nation: 4 columns, 25 rows
+  - orders: 9 columns, 1,500,000 rows
+  - part: 9 columns, 200,000 rows
+  - partsupp: 5 columns, 800,000 rows
+  - region: 3 columns, 5 rows
+  - supplier: 7 columns, 10,000 rows

@@ -1,0 +1,61 @@
+name: Unit Tests
+
+# Runs the fast unit test suite (watermark manager, audit logger, DQ checks)
+# on every push and PR, plus a separate integration-tests job that runs the
+# same-shaped logic against a real Postgres service container — unit tests
+# alone can't catch a broken SQL string, only a live database can.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  unit-tests:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install test dependencies
+        run: pip install -r tests/requirements-test.txt
+
+      - name: Run unit tests
+        run: pytest -m "not integration"
+
+  integration-tests:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:15
+        env:
+          POSTGRES_PASSWORD: test
+          POSTGRES_USER: postgres
+          POSTGRES_DB: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install test dependencies
+        run: pip install -r tests/requirements-test.txt
+
+      - name: Run integration tests against live Postgres
+        env:
+          TEST_DATABASE_URL: postgresql+psycopg2://postgres:test@localhost:5432/postgres
+        run: pytest tests/integration -m integration

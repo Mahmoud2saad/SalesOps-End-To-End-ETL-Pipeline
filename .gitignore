@@ -1,0 +1,289 @@
+# ============================================
+# POSTGRESQL DATA DIRECTORIES - COMPLETE EXCLUSION
+# These directories contain binary database files and should NEVER be committed
+# ============================================
+
+# PostgreSQL data directories (from your .env volume mounts)
+# These patterns will match regardless of where they're located
+postgres-local/
+postgres-control/
+postgres-airflow/
+postgres/*/data/
+**/postgres-local/
+**/postgres-control/
+**/postgres-airflow/
+
+# PostgreSQL data files (in case directories are not properly named)
+# These are PostgreSQL internal files that should never be in version control
+PG_VERSION
+pg_hba.conf
+pg_ident.conf
+postgresql.conf
+postgresql.auto.conf
+postmaster.pid
+postmaster.opts
+*.pid
+
+# PostgreSQL data subdirectories (complete exclusion)
+**/base/
+**/global/
+**/pg_wal/
+**/pg_logical/
+**/pg_stat/
+**/pg_stat_tmp/
+**/pg_subtrans/
+**/pg_tblspc/
+**/pg_twophase/
+**/pg_multixact/
+**/pg_xact/
+**/pg_replslot/
+**/pg_snapshots/
+**/pg_notify/
+**/pg_serial/
+**/pg_dynshmem/
+
+# PostgreSQL backup directories
+**/backups/
+**/pg_backup/
+*.backup
+*.dump
+*.sql.gz
+
+# ============================================
+# DATA DIRECTORIES - Binary files, large datasets, and persistent storage
+# ============================================
+
+# Spark streaming checkpoints (BINARY - can be large)
+checkpoint/
+**/checkpoint/
+spark-warehouse/
+spark-*/
+
+# pgAdmin settings (contains saved connections and session data)
+pgadmin/
+.pgadmin/
+**/pgadmin/
+
+# DuckDB data (local analytics database)
+duckdb_data/
+**/duckdb_data/
+*.duckdb
+*.db
+*.sqlite
+*.sqlite3
+
+# ============================================
+# AIRFLOW RUNTIME FILES
+# ============================================
+
+# Airflow logs (can grow large quickly)
+airflow/logs/
+**/airflow/logs/
+airflow/logs/*.log
+airflow/logs/**/*.log
+airflow/logs/**/*.py
+!airflow/logs/.gitkeep
+
+# Airflow database (SQLite - not used but may appear)
+airflow/airflow.db
+airflow/airflow.db-journal
+
+# Airflow configuration (generated files)
+airflow/airflow.cfg
+airflow/webserver_config.py
+!airflow/webserver_config.py.example
+
+# Airflow DAGs compiled files
+airflow/dags/__pycache__/
+airflow/dags/*.pyc
+**/__pycache__/
+
+# ============================================
+# LARGE DATASETS - Keep repo small
+# ============================================
+
+# TPC-H data files (these can be tens of GB)
+data/*.tbl
+data/*.csv
+data/*.parquet
+data/*.json
+data/*.avro
+data/*.orc
+data/wholedatasets/
+data/raw/
+data/
+data/processed/
+data/curated/
+**/data/*.tbl
+**/data/*.csv
+**/data/*.parquet
+!data/.gitkeep
+!.gitkeep
+
+
+# ============================================
+# PYTHON CACHE AND BUILD FILES
+# ============================================
+
+# Python bytecode
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+*.egg
+*.egg-info/
+dist/
+build/
+develop-eggs/
+eggs/
+parts/
+var/
+sdist/
+*.egg-info/
+
+# Jupyter Notebook checkpoints
+.ipynb_checkpoints/
+*.ipynb_checkpoints/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# ============================================
+# IDE AND EDITOR FILES
+# ============================================
+
+# VS Code
+.vscode/
+*.code-workspace
+.history/
+.vscode-server/
+
+# PyCharm
+.idea/
+*.iml
+*.iws
+.idea_modules/
+.classpath
+.project
+.settings/
+
+# Vim/Emacs
+*.swp
+*.swo
+*~
+*.un~
+*.tmp
+
+# OS generated files
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+desktop.ini
+
+# ============================================
+# DOCKER VOLUMES AND RUNTIME
+# ============================================
+
+# Docker-managed volumes (these contain cached packages)
+pip-cache/
+.docker/
+docker-compose.override.yml
+
+# Local volume mount points (if you have them in project root)
+volumes/
+docker-volumes/
+
+# ============================================
+# ENVIRONMENT VARIABLES - CRITICAL: NEVER COMMIT
+# ============================================
+
+# Your Snowflake credentials and other secrets live here - NEVER COMMIT
+.env
+.env.*
+!.env.example
+!.env.template
+!.env.sample
+
+# Secrets and credentials
+secrets/
+*.key
+*.pem
+*.cert
+*.crt
+*.p12
+credentials.json
+service-account.json
+
+# ============================================
+# LOG FILES
+# ============================================
+
+*.log
+*.pid
+*.seed
+*.pid.lock
+logs/
+log/
+
+# ============================================
+# TEST AND COVERAGE
+# ============================================
+
+htmlcov/
+.tox/
+.coverage
+.coverage.*
+.cache
+nosetests.xml
+coverage.xml
+*.cover
+*.py,cover
+.hypothesis/
+.pytest_cache/
+
+# ============================================
+# TEMPORARY AND CACHE FILES
+# ============================================
+
+*.tmp
+*.temp
+*.cache
+.cache/
+*.swp
+*.swo
+*~
+*.lock
+
+# ============================================
+# DATABASE CONNECTION FILES
+# ============================================
+
+# pgpass files (contains passwords)
+.pgpass
+pgpass.conf
+.pg_service.conf
+
+# ============================================
+# CRITICAL: WHAT TO KEEP
+# ============================================
+
+# Keep empty directory structures
+!.gitkeep
+!**/.gitkeep
+
+# Keep example SQL scripts (if they're not data files)
+!sql_scripts/**/*.sql
+!sql_scripts/**/.gitkeep
+
+# Keep documentation
+!*.md
+!docs/
+
+# Keep example configurations
+!*.example
+!*.sample
+!*.template
