@@ -255,12 +255,43 @@ DQ checks exit non-zero on a critical failure, which fails the task directly —
 
 This project began as a copy of [Ibrahim-Hegazi/SalesOps-End-To-End-ETL-Pipeline](https://github.com/Ibrahim-Hegazi/SalesOps-End-To-End-ETL-Pipeline), originally built as a six-person team project — see `docs/tasks_distribution/` for the original task breakdown and team roster (Ibrahim, Manar, Ahmed, Abram, Habiba, Shrouk). I downloaded the original codebase, developed independently on my own machine, and pushed the result here as a standalone repository rather than a GitHub fork. The Snowflake environment (account, schema and role grants) is inherited from that original setup and left unchanged, since it's tied to a real account rather than just a name.
 
-**What I added on top of the original:**
-- The full data quality framework — bronze and silver checks, including SCD2 invariants — writing to `control.data_quality_metrics`
-- The unit test suite (18 tests, mocked) and integration test suite (8 tests, against a live Postgres instance)
-- CI pipeline (GitHub Actions) running both test suites on every push
-- Watermark and audit logging hardening
-- Fixes to the Airflow DAG, which previously pointed at a stale legacy script
+### State of the original project
+
+The original README described a "production-ready" pipeline, but its own roadmap told a more accurate story. Of the ten planned phases, only three were actually finished:
+
+| Phase | Original status |
+|---|---|
+| 1. Environment setup | Done |
+| 2. Schema design | Done |
+| 3. Watermark implementation | Done |
+| 4. Extract layer | In progress |
+| 5. Transformation layer | In progress |
+| 6. Data quality framework | In progress |
+| 7. Load layer (Snowflake) | Planned |
+| 8. Orchestration | Planned |
+| 9. Monitoring & alerting | Planned |
+| 10. BI dashboards | Planned |
+
+In practice: the schema design and the watermark table concept existed, but the pipeline didn't actually run end-to-end — extraction, transformation, and loading were partial or missing, there was no working data quality logic, nothing was scheduled, and there was no test suite or CI at all (testing wasn't even on the roadmap — it appeared once, as a wishlist item under "Future Improvements").
+
+### What I did
+
+**Finished the pipeline that had stalled at "in progress."** Built out the extract → transform → load chain into working scripts for the bronze, silver, and gold layers, including the Snowflake gold load, which the original hadn't started.
+
+**Built the data quality framework from a stub into something that actually runs.** The original claimed "10+ checks" without a working implementation. I built and wired in concrete checks — row count, null rate, uniqueness, referential integrity, and SCD Type 2 invariants — writing every result to `control.data_quality_metrics`, and made the pipeline **fail on critical issues** rather than just log them.
+
+**Added a test suite and CI from zero.** There were no tests in the original at all. I added:
+- 18 unit tests against a mocked database
+- 8 integration tests against a live Postgres container
+- A GitHub Actions CI pipeline running both suites on every push
+
+**Got real orchestration running.** The original's orchestration phase was still "planned." I got the bronze load and both DQ suites running on a daily Airflow schedule, and fixed a broken DAG that had been pointing at a stale, superseded script.
+
+**Hardened watermarking and audit logging.** The concept existed in the original; I made it more robust for reliable incremental reruns (safety margins on both ID and timestamp, `ON CONFLICT` upserts for idempotency).
+
+### What's still not done
+
+I'd rather disclose this than have it discovered later: monitoring/alerting and BI dashboards are not implemented, and SCD Type 2 is only applied to `partsupp`, not extended to the other dimensions. See [Roadmap](#roadmap) for what's next.
 
 ## Contact
 
